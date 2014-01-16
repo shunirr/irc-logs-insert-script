@@ -51,25 +51,29 @@ client = Mysql2::Client.new(host:     config['host'],
                             password: config['password'],
                             database: config['database'])
 
-Dir.glob("#{log_dir}/**/*.txt") do |file|
-  log, dir, txt = file.split('/')
-  channel_id = get_channel_id(client, dir)
-  date = txt.gsub(/\.txt$/, '').split('.')
+Dir.glob("#{log_dir}/*.log") do |file|
+  user, network, o = File.basename(file, '.log').scan(/([^_]+?)_([^_]+?)_(.*)$/).flatten
+  channel, date = o.scan(/(.*)_(\d+)/).flatten
+  year, month, day = date.scan(/(\d\d\d\d)(\d\d)(\d\d)/).flatten
+
+  # tiarra っぽいチャンネル名にする
+  channel = "#{channel}@#{network}"
+  channel_id = get_channel_id(client, channel)
 
   logs = open(file).read
-  logs.split("\n").each do |line|
-    notice = nil
-    if line =~ /^(\d\d):(\d\d):(\d\d) <(#[^:]+?):([^>]+)> (.*)$/
+  logs.encode("UTF-16BE", "UTF-8", invalid: :replace, undef: :replace, replace: '.')
+  logs.encode("UTF-8")
+  logs.split(/(\n|\r|\r\n)/).each do |line|
+    if line =~ /^\[(\d+):(\d+):(\d+)\] <([^>]*)> (.*)$/
       notice = false
-    elsif line =~ /^(\d\d):(\d\d):(\d\d) \((#[^:]+?):([^)]+)\) (.*)$/
+    elsif line =~ /^\[(\d+):(\d+):(\d+)\] -(.*)- (.*)$/
       notice = true
     else
       next
     end
-    time = Time.local date[0].to_i, date[1].to_i, date[2].to_i, $1.to_i, $2.to_i, $3.to_i
-    channel = $4
-    nick = $5
-    text = $6
+    time = Time.local year.to_i, month.to_i, day.to_i, $1.to_i, $2.to_i, $3.to_i
+    nick = $4
+    text = $5
     nick_id = get_nick_id(client, nick)
     is_notice = (notice) ? '1' : '0'
 
